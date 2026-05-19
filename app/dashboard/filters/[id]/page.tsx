@@ -13,14 +13,11 @@ export default async function FilterEditPage({
   const { id } = await params;
   const supabase = await createSupabaseServerClient();
 
-  const [filterRes, servicesRes] = await Promise.all([
-    supabase.from("service_filters").select("*").eq("id", id).maybeSingle(),
-    supabase
-      .from("services")
-      .select("id,name")
-      .eq("active", true)
-      .order("sort_order"),
-  ]);
+  const filterRes = await supabase
+    .from("service_filters")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
 
   if (!filterRes.data) notFound();
 
@@ -29,11 +26,9 @@ export default async function FilterEditPage({
     id: f.id,
     label_ar: f.label_ar ?? "",
     label_en: f.label_en,
-    target_service_id: f.target_service_id,
     sort_order: f.sort_order,
     is_active: f.is_active,
   };
-  const services = (servicesRes.data ?? []) as { id: string; name: string }[];
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -45,10 +40,10 @@ export default async function FilterEditPage({
         رجوع للقائمة
       </Link>
       <div>
-        <h1 className="text-2xl font-bold">تعديل الفلتر</h1>
+        <h1 className="text-2xl font-bold">تعديل الفئة</h1>
         <p className="text-sm text-muted-foreground font-mono text-xs">{f.id}</p>
       </div>
-      <FilterEditForm initial={initial} services={services} isNew={false} />
+      <FilterEditForm initial={initial} isNew={false} />
     </div>
   );
 }

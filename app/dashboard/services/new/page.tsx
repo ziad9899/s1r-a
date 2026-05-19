@@ -1,9 +1,16 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { NewServiceForm } from "./new-service-form";
 
-export default function NewServicePage() {
+export default async function NewServicePage() {
+  const supabase = await createSupabaseServerClient();
+  const { data: categories } = await supabase
+    .from("service_filters")
+    .select("id, label_ar")
+    .order("sort_order");
+
   return (
     <div className="space-y-6 max-w-2xl">
       <Link
@@ -16,11 +23,11 @@ export default function NewServicePage() {
       <div>
         <h1 className="text-2xl font-bold">خدمة جديدة</h1>
         <p className="text-sm text-muted-foreground">
-          أدخل الأساسيات الآن. بعد الإنشاء تقدر تضيف الصورة والوصف والـ FAQs
-          من صفحة التعديل.
+          أدخل الأساسيات الآن. بعد الإنشاء تقدر تضيف الصورة والوصف وأسعار
+          الأحجام والـ FAQs من صفحة التعديل.
         </p>
       </div>
-      <NewServiceForm />
+      <NewServiceForm categories={categories ?? []} />
     </div>
   );
 }

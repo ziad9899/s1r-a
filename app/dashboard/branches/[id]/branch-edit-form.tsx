@@ -125,14 +125,23 @@ export function BranchEditForm({
       // don't try to be clever here — branch_hours is at most 7 rows.
       const upserts: HourRow[] = [];
       const closedWeekdays: number[] = [];
-      for (const { weekday } of DAYS) {
+      for (const { weekday, label } of DAYS) {
         const s = slots[weekday];
         if (s.closed) {
           closedWeekdays.push(weekday);
         } else if (!s.open || !s.close) {
-          toast.error(`عبّئ ساعات اليوم رقم ${weekday} أو حدّده مغلقاً.`);
+          toast.error(`عبّئ ساعات ${label} أو حدّده مغلقاً.`);
           return;
         } else {
+          // close at midnight (00:00) is allowed as a sentinel for "until
+          // end of day". Otherwise close must be strictly after open.
+          const isMidnightClose = s.close === "00:00";
+          if (!isMidnightClose && s.close <= s.open) {
+            toast.error(
+              `${label}: وقت الإغلاق لازم بعد وقت الفتح. (أو 00:00 = منتصف الليل)`,
+            );
+            return;
+          }
           upserts.push({
             weekday,
             open_time: s.open,

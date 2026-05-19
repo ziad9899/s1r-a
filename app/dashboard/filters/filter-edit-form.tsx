@@ -15,28 +15,22 @@ export type FilterFormValues = {
   id?: string;
   label_ar: string;
   label_en: string | null;
-  target_service_id: string | null;
   sort_order: number;
   is_active: boolean;
 };
 
-type ServiceOption = { id: string; name: string };
-
 const empty: FilterFormValues = {
   label_ar: "",
   label_en: null,
-  target_service_id: null,
   sort_order: 0,
   is_active: true,
 };
 
 export function FilterEditForm({
   initial,
-  services,
   isNew,
 }: {
   initial?: FilterFormValues;
-  services: ServiceOption[];
   isNew: boolean;
 }) {
   const router = useRouter();
@@ -57,16 +51,11 @@ export function FilterEditForm({
       toast.error("المسمّى بالعربية مطلوب.");
       return;
     }
-    if (!form.target_service_id) {
-      toast.error("اختر الخدمة المستهدفة.");
-      return;
-    }
     startTransition(async () => {
       const supabase = createSupabaseBrowserClient();
       const payload = {
         label_ar: form.label_ar.trim(),
         label_en: form.label_en?.trim() || null,
-        target_service_id: form.target_service_id,
         sort_order: Number(form.sort_order),
         is_active: form.is_active,
       };
@@ -89,7 +78,12 @@ export function FilterEditForm({
 
   function onDelete() {
     if (!form.id) return;
-    if (!confirm("متأكد من حذف هذا الفلتر؟ لا يمكن التراجع.")) return;
+    if (
+      !confirm(
+        "متأكد من حذف هذه الفئة؟ الخدمات المرتبطة بها ستعود إلى \"بدون فئة\".",
+      )
+    )
+      return;
     startDelete(async () => {
       const supabase = createSupabaseBrowserClient();
       const { error } = await supabase
@@ -128,28 +122,10 @@ export function FilterEditForm({
               placeholder="e.g. Thermal"
             />
           </div>
-
-          <div className="grid gap-1.5">
-            <Label>الخدمة المستهدفة *</Label>
-            <select
-              value={form.target_service_id ?? ""}
-              onChange={(e) =>
-                set("target_service_id", e.target.value || null)
-              }
-              className="border-input bg-background h-9 rounded-md border px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            >
-              <option value="">— اختر —</option>
-              {services.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name} ({s.id})
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-muted-foreground">
-              عند الضغط على هذا الفلتر، يفلتر التطبيق الشبكة لإظهار هذه
-              الخدمة فقط.
-            </p>
-          </div>
+          <p className="text-xs text-muted-foreground">
+            تظهر الفئة كزرّ فوق شبكة الخدمات. ربط الخدمات بهذه الفئة يتمّ من
+            صفحة كل خدمة عبر حقل &quot;الفئة&quot;.
+          </p>
         </CardContent>
       </Card>
 

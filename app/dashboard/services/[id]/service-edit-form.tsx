@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Loader2, Trash2 } from "lucide-react";
+import { Loader2, Trash2, Copy, Ticket } from "lucide-react";
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { deleteImage } from "@/lib/storage";
@@ -36,9 +36,26 @@ type Service = {
   hero_alt_en: string | null;
   active: boolean;
   sort_order: number;
+  promo_code: string | null;
+  promo_discount_percent: number | null;
+  promo_active: boolean;
+  category_id: string | null;
+  price_size_small: number | null;
+  price_size_medium: number | null;
+  price_size_large: number | null;
+  package_items_ar: string[] | null;
+  package_items_en: string[] | null;
 };
 
-export function ServiceEditForm({ service }: { service: Service }) {
+type CategoryOption = { id: string; label_ar: string };
+
+export function ServiceEditForm({
+  service,
+  categories,
+}: {
+  service: Service;
+  categories: CategoryOption[];
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [deleting, startDelete] = useTransition();
@@ -51,7 +68,7 @@ export function ServiceEditForm({ service }: { service: Service }) {
   function onDelete() {
     if (
       !confirm(
-        `متأكد من حذف خدمة "${form.name}"؟ سيُحذف معها كل ربط بها (الفلاتر، صور المعرض). الحجوزات السابقة لا تُحذف.`,
+        `متأكد من حذف خدمة "${form.name}"؟ سيُحذف معها كل ربط بها (صور المعرض). الحجوزات السابقة لا تُحذف.`,
       )
     ) {
       return;
@@ -77,6 +94,34 @@ export function ServiceEditForm({ service }: { service: Service }) {
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    // Sizes are validated together: either all three filled, or none.
+    // Partial config would yield an inconsistent quote because the booking
+    // flow falls back to starting_price × multiplier only when *all* sizes
+    // are null.
+    const anySize =
+      form.price_size_small != null ||
+      form.price_size_medium != null ||
+      form.price_size_large != null;
+    const allSizes =
+      form.price_size_small != null &&
+      form.price_size_medium != null &&
+      form.price_size_large != null;
+    if (anySize && !allSizes) {
+      toast.error("لو تبي تستخدم أسعار الحجم، عبّ الثلاث أحجام (صغير + وسط + كبير).");
+      return;
+    }
+    if (form.promo_active) {
+      const code = form.promo_code?.trim() ?? "";
+      const pct = Number(form.promo_discount_percent ?? 0);
+      if (!code) {
+        toast.error("اكتب رمز الخصم أو ألغ التفعيل.");
+        return;
+      }
+      if (!Number.isFinite(pct) || pct < 1 || pct > 99) {
+        toast.error("نسبة الخصم لازم تكون بين 1 و 99.");
+        return;
+      }
+    }
     startTransition(async () => {
       const supabase = createSupabaseBrowserClient();
       const { error } = await supabase
@@ -102,6 +147,23 @@ export function ServiceEditForm({ service }: { service: Service }) {
           hero_alt_en: form.hero_alt_en,
           active: form.active,
           sort_order: Number(form.sort_order),
+          promo_code: form.promo_active
+            ? (form.promo_code?.trim().toUpperCase() || null)
+            : null,
+          promo_discount_percent: form.promo_active
+            ? Number(form.promo_discount_percent ?? 0)
+            : null,
+          promo_active: form.promo_active,
+          category_id: form.category_id || null,
+          price_size_small: form.price_size_small,
+          price_size_medium: form.price_size_medium,
+          price_size_large: form.price_size_large,
+          package_items_ar: (form.package_items_ar ?? []).filter(
+            (s) => s.trim() !== "",
+          ),
+          package_items_en: (form.package_items_en ?? []).filter(
+            (s) => s.trim() !== "",
+          ),
         })
         .eq("id", form.id);
 
@@ -191,6 +253,78 @@ export function ServiceEditForm({ service }: { service: Service }) {
               </Label>
             </div>
           </div>
+          <div className="grid gap-1.5">
+            <Label>الفئة</Label>
+            <select
+              value={form.category_id ?? ""}
+              onChange={(e) => set("category_id", e.target.value || null)}
+              className="border-input bg-background flex h-9 w-full rounded-md border px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              <option value="">— بدون فئة (تظهر فقط تحت &quot;الكل&quot;) —</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label_ar}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-muted-foreground">
+              الفئة هي زرّ في شريط الفلاتر فوق الشبكة. الخدمات المرتبطة بنفس
+              الفئة تظهر تحت ضغطة الزر. أنشئ فئات جديدة من{" "}
+              <span className="font-medium">الفئات</span>.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>أسعار حسب حجم السيارة (اختياري)</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            لو عبّيت الثلاث أسعار، السعر النهائي في الحجز يجي مباشرة من هنا حسب
+            حجم سيارة العميل. لو خلّيتها فاضية، يُحسب السعر من السعر الأساسي
+            × معامل نوع السيارة (سيدان=1، SUV=1.25، لاكجري=1.5).
+          </p>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <div className="grid grid-cols-3 gap-4">
+            <SizePriceField
+              label="سعر السيارة الصغيرة"
+              value={form.price_size_small}
+              onChange={(v) => set("price_size_small", v)}
+            />
+            <SizePriceField
+              label="سعر السيارة الوسط"
+              value={form.price_size_medium}
+              onChange={(v) => set("price_size_medium", v)}
+            />
+            <SizePriceField
+              label="سعر السيارة الكبيرة"
+              value={form.price_size_large}
+              onChange={(v) => set("price_size_large", v)}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>ما تشمله الخدمة (اختياري)</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            نقاط قصيرة تظهر في صفحة الخدمة. كل سطر = نقطة.
+          </p>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <IncludedItemsField
+            label="عربي"
+            items={form.package_items_ar ?? []}
+            onChange={(items) => set("package_items_ar", items)}
+          />
+          <IncludedItemsField
+            label="English"
+            items={form.package_items_en ?? []}
+            onChange={(items) => set("package_items_en", items)}
+            ltr
+          />
         </CardContent>
       </Card>
 
@@ -234,6 +368,86 @@ export function ServiceEditForm({ service }: { service: Service }) {
         </CardHeader>
         <CardContent>
           <GalleryUploader serviceId={form.id} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Ticket className="size-5" />
+            خصم خاص بهذه الخدمة
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            عند التفعيل، يقدر العميل يدخل الرمز في صفحة الحجز ويحصل على الخصم.
+            يمكن نفس الرمز يكون على عدة خدمات (مثلاً EID2026).
+          </p>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <div className="flex items-center gap-3">
+            <input
+              id="promo_active"
+              type="checkbox"
+              className="size-4"
+              checked={form.promo_active}
+              onChange={(e) => set("promo_active", e.target.checked)}
+            />
+            <Label htmlFor="promo_active" className="cursor-pointer">
+              تفعيل الخصم
+            </Label>
+          </div>
+          {form.promo_active && (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-1.5">
+                <Label>رمز الخصم</Label>
+                <div className="flex gap-2">
+                  <Input
+                    dir="ltr"
+                    value={form.promo_code ?? ""}
+                    onChange={(e) =>
+                      set("promo_code", e.target.value.toUpperCase())
+                    }
+                    placeholder="EID2026"
+                    maxLength={32}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    disabled={!form.promo_code?.trim()}
+                    onClick={() => {
+                      navigator.clipboard.writeText(form.promo_code ?? "");
+                      toast.success("تم نسخ الرمز");
+                    }}
+                  >
+                    <Copy className="size-4" />
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  أحرف وأرقام فقط. الأقصر = أسهل للمشاركة.
+                </p>
+              </div>
+              <div className="grid gap-1.5">
+                <Label>نسبة الخصم (%)</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={99}
+                  step={1}
+                  dir="ltr"
+                  value={form.promo_discount_percent ?? ""}
+                  onChange={(e) =>
+                    set(
+                      "promo_discount_percent",
+                      e.target.value === "" ? null : Number(e.target.value),
+                    )
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  من 1 إلى 99. (100 = مجاناً، غير مدعوم.)
+                </p>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -350,6 +564,59 @@ function TextArea({
         dir={ltr ? "ltr" : undefined}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        className="border-input bg-background flex w-full rounded-md border px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+      />
+    </div>
+  );
+}
+
+function SizePriceField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number | null;
+  onChange: (v: number | null) => void;
+}) {
+  return (
+    <div className="grid gap-1.5">
+      <Label>{label} (ر.س)</Label>
+      <Input
+        type="number"
+        min={0}
+        step={50}
+        dir="ltr"
+        value={value ?? ""}
+        onChange={(e) =>
+          onChange(e.target.value === "" ? null : Number(e.target.value))
+        }
+      />
+    </div>
+  );
+}
+
+function IncludedItemsField({
+  label,
+  items,
+  onChange,
+  ltr,
+}: {
+  label: string;
+  items: string[];
+  onChange: (items: string[]) => void;
+  ltr?: boolean;
+}) {
+  const text = items.join("\n");
+  return (
+    <div className="grid gap-1.5">
+      <Label>{label}</Label>
+      <textarea
+        rows={5}
+        dir={ltr ? "ltr" : undefined}
+        value={text}
+        onChange={(e) => onChange(e.target.value.split("\n"))}
+        placeholder={ltr ? "Free polishing\nWheel coating" : "تلميع مجاني\nنانو للجنوط"}
         className="border-input bg-background flex w-full rounded-md border px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
       />
     </div>

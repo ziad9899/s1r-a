@@ -12,13 +12,15 @@ export default async function ServiceEditPage({
 }) {
   const { id } = await params;
   const supabase = await createSupabaseServerClient();
-  const { data: service } = await supabase
-    .from("services")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
+  const [serviceRes, categoriesRes] = await Promise.all([
+    supabase.from("services").select("*").eq("id", id).maybeSingle(),
+    supabase
+      .from("service_filters")
+      .select("id, label_ar")
+      .order("sort_order"),
+  ]);
 
-  if (!service) notFound();
+  if (!serviceRes.data) notFound();
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -31,9 +33,12 @@ export default async function ServiceEditPage({
       </Link>
       <div>
         <h1 className="text-2xl font-bold">تعديل الخدمة</h1>
-        <p className="text-sm text-muted-foreground">{service.id}</p>
+        <p className="text-sm text-muted-foreground">{serviceRes.data.id}</p>
       </div>
-      <ServiceEditForm service={service} />
+      <ServiceEditForm
+        service={serviceRes.data}
+        categories={categoriesRes.data ?? []}
+      />
     </div>
   );
 }

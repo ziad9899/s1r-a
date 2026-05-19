@@ -20,7 +20,10 @@ type Form = {
   duration_label: string;
   sort_order: number;
   active: boolean;
+  category_id: string | null;
 };
+
+type CategoryOption = { id: string; label_ar: string };
 
 const ICON_OPTIONS = [
   { value: "shield", label: "درع (افتراضي)" },
@@ -39,6 +42,7 @@ const empty: Form = {
   duration_label: "",
   sort_order: 99,
   active: true,
+  category_id: null,
 };
 
 // The services table uses a TEXT primary key (e.g. 'ppf', 'nano'). The
@@ -54,7 +58,11 @@ function sanitiseId(raw: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-export function NewServiceForm() {
+export function NewServiceForm({
+  categories,
+}: {
+  categories: CategoryOption[];
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [form, setForm] = useState<Form>(empty);
@@ -90,6 +98,7 @@ export function NewServiceForm() {
         duration_label: form.duration_label.trim() || null,
         sort_order: Number(form.sort_order),
         active: form.active,
+        category_id: form.category_id,
       });
 
       if (error) {
@@ -174,6 +183,25 @@ export function NewServiceForm() {
               value={String(form.sort_order)}
               onChange={(v) => set("sort_order", Number(v))}
             />
+          </div>
+          <div className="grid gap-1.5">
+            <Label>الفئة</Label>
+            <select
+              value={form.category_id ?? ""}
+              onChange={(e) => set("category_id", e.target.value || null)}
+              className="border-input bg-background h-9 rounded-md border px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              <option value="">— بدون فئة —</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label_ar}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-muted-foreground">
+              تظهر الخدمة عند الضغط على هذه الفئة في شريط الفلاتر. يمكن تغييرها
+              لاحقاً من صفحة التعديل.
+            </p>
           </div>
           <div className="flex items-center gap-3">
             <input
