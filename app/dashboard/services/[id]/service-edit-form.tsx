@@ -585,7 +585,7 @@ function SizePriceField({
       <Input
         type="number"
         min={0}
-        step={50}
+        step="any"
         dir="ltr"
         value={value ?? ""}
         onChange={(e) =>
