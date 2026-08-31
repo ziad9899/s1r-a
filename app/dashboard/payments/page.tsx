@@ -4,7 +4,11 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
 import { PaymentsForm } from "./payments-form";
-import { SECRET_NAMES } from "./actions";
+import { SECRET_NAMES } from "./config";
+
+// Per-request only: reads live settings + service-role Vault status; never
+// statically prerendered (avoids running getSupabaseAdmin at build time).
+export const dynamic = "force-dynamic";
 
 // Payment configuration — super_admin only (this page writes live gateway
 // credentials). Provider on/off toggles live in app_settings (app-visible);

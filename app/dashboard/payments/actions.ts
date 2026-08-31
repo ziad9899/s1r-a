@@ -5,29 +5,7 @@ import { revalidatePath } from "next/cache";
 import { assertCallerIsSuperAdmin } from "@/lib/admin-gate";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
-// The credential names — these MUST match the env-var names the Edge Functions
-// read, so the Vault value seamlessly overrides the env fallback (see
-// supabase/functions/_shared/secrets.ts). Secret VALUES never reach the browser:
-// they are written here (server-only, service role) and never read back.
-export const SECRET_NAMES = [
-  "MOYASAR_SECRET_KEY",
-  "MOYASAR_WEBHOOK_SECRET",
-  "TABBY_SECRET_KEY",
-  "TABBY_MERCHANT_CODE",
-  "TABBY_WEBHOOK_SECRET",
-  "MADFU_AUTH",
-  "MADFU_APP_CODE",
-  "MADFU_API_KEY",
-  "MADFU_WEBHOOK_SECRET",
-] as const;
-
-export type SavePaymentInput = {
-  tabbyEnabled: boolean;
-  madfuEnabled: boolean;
-  // name -> new value. Only NON-EMPTY entries are written (write-only fields;
-  // an empty field means "leave the current value unchanged").
-  secrets: Record<string, string>;
-};
+import { SECRET_NAMES, type SavePaymentInput } from "./config";
 
 export async function savePaymentConfig(
   input: SavePaymentInput,
