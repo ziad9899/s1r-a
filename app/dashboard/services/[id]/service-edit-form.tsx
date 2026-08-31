@@ -338,9 +338,9 @@ export function ServiceEditForm({
             folder={form.id}
             value={form.hero_image_url}
             onChange={(url) => set("hero_image_url", url)}
-            aspect="16/9"
-            recommendedSize="1920×1080"
-            recommendedRatio="16:9"
+            aspect="1/1"
+            recommendedSize="1200×1200"
+            recommendedRatio="1:1"
           />
           <div className="grid grid-cols-2 gap-4">
             <Field

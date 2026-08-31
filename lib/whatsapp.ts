@@ -17,12 +17,14 @@ export const TEMPLATE_LABELS: Record<WhatsAppTemplate, string> = {
 };
 
 const AR_DATE = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
+  timeZone: "Asia/Riyadh",
   weekday: "long",
   day: "numeric",
   month: "long",
 });
 
 const AR_TIME = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
+  timeZone: "Asia/Riyadh",
   hour: "numeric",
   minute: "2-digit",
 });
@@ -118,8 +120,14 @@ export function defaultTemplateForStatus(
       return "confirm";
     case "confirmed":
       return "remind24h";
+    case "tow_on_the_way":
+      return "remind1h";
+    case "car_received":
+      return "remind1h";
     case "in_progress":
       return "remind1h";
+    case "car_dispatched":
+      return "thank";
     case "completed":
       return "thank";
     case "cancelled":
@@ -134,8 +142,14 @@ export function templatesForStatus(status: BookingStatus): WhatsAppTemplate[] {
       return ["confirm", "cancel"];
     case "confirmed":
       return ["remind24h", "remind1h", "confirm", "cancel"];
+    case "tow_on_the_way":
+      return ["remind1h", "cancel"];
+    case "car_received":
+      return ["remind1h", "thank"];
     case "in_progress":
       return ["remind1h", "thank"];
+    case "car_dispatched":
+      return ["thank"];
     case "completed":
       return ["thank"];
     case "cancelled":

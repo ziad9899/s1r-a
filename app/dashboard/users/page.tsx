@@ -14,12 +14,20 @@ import { ExportButton } from "@/components/export-button";
 
 import { UserActionsMenu } from "./user-actions-menu";
 import { exportUsersCsv } from "./export-actions";
+import { UsersSearch } from "./users-search";
 
 const PAGE_SIZE = 20;
 
 type SearchParams = {
   page?: string;
+  q?: string;
 };
+
+// Normalize a phone string to bare digits with the Saudi country code and any
+// leading zero stripped, so 0501234567 / 501234567 / +966501234567 /
+// 966501234567 all reduce to the same "501234567".
+const normPhone = (s: string) =>
+  s.replace(/\D/g, "").replace(/^966/, "").replace(/^0/, "");
 
 type UserRow = {
   id: string;
@@ -34,12 +42,14 @@ type UserRow = {
 };
 
 const AR_DATE = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
+  timeZone: "Asia/Riyadh",
   year: "numeric",
   month: "short",
   day: "numeric",
 });
 
 const AR_DATETIME = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
+  timeZone: "Asia/Riyadh",
   year: "numeric",
   month: "short",
   day: "numeric",
@@ -66,6 +76,7 @@ export default async function UsersPage({
 }) {
   const params = await searchParams;
   const page = Math.max(1, Number(params.page) || 1);
+  const q = (params.q ?? "").trim();
 
   const supabase = await createSupabaseServerClient();
   const {
@@ -81,10 +92,31 @@ export default async function UsersPage({
     supabase.from("bookings").select("user_id"),
   ]);
   const allRows = (usersRes.data ?? []) as UserRow[];
-  const total = allRows.length;
+
+  // Filter server-side over the full set (before pagination) so search covers
+  // every user, matching by name (case-insensitive substring) OR phone (with
+  // Saudi country/leading-zero normalized on both sides).
+  let filtered = allRows;
+  if (q) {
+    const ql = q.toLowerCase();
+    const qHasDigit = /\d/.test(q);
+    const qPhone = qHasDigit ? normPhone(q) : "";
+    filtered = allRows.filter((u) => {
+      const first = (u.first_name ?? "").toLowerCase();
+      const last = (u.last_name ?? "").toLowerCase();
+      const full = [u.first_name, u.last_name].filter(Boolean).join(" ").toLowerCase();
+      const nameMatch =
+        full.includes(ql) || first.includes(ql) || last.includes(ql);
+      const phoneMatch =
+        qHasDigit && qPhone.length > 0 && normPhone(u.phone ?? "").includes(qPhone);
+      return nameMatch || phoneMatch;
+    });
+  }
+
+  const total = filtered.length;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
-  const rows = allRows.slice(
+  const rows = filtered.slice(
     (safePage - 1) * PAGE_SIZE,
     safePage * PAGE_SIZE,
   );
@@ -95,14 +127,23 @@ export default async function UsersPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">المستخدمين</h1>
-          <p className="text-sm text-muted-foreground">
-            {total} مستخدم مسجّل
-          </p>
+      <div className="space-y-4">
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold">المستخدمين</h1>
+            <p className="text-sm text-muted-foreground">
+              {q ? (
+                <>
+                  {total} نتيجة لبحث «{q}»
+                </>
+              ) : (
+                <>{total} مستخدم مسجّل</>
+              )}
+            </p>
+          </div>
+          <ExportButton action={exportUsersCsv} />
         </div>
-        <ExportButton action={exportUsersCsv} />
+        <UsersSearch />
       </div>
 
       <div className="rounded-md border bg-background">
@@ -132,7 +173,7 @@ export default async function UsersPage({
                   colSpan={7}
                   className="text-center text-muted-foreground py-12"
                 >
-                  لا يوجد مستخدمين بعد.
+                  {q ? "لا توجد نتائج مطابقة للبحث." : "لا يوجد مستخدمين بعد."}
                 </TableCell>
               </TableRow>
             )}
@@ -199,7 +240,7 @@ export default async function UsersPage({
       {totalPages > 1 && (
         <div className="flex items-center justify-center gap-2">
           <PageLink
-            href={pageHref(safePage - 1)}
+            href={pageHref(safePage - 1, q)}
             disabled={safePage === 1}
             label="السابق"
           />
@@ -207,7 +248,7 @@ export default async function UsersPage({
             صفحة {safePage} من {totalPages}
           </span>
           <PageLink
-            href={pageHref(safePage + 1)}
+            href={pageHref(safePage + 1, q)}
             disabled={safePage >= totalPages}
             label="التالي"
           />
@@ -243,7 +284,9 @@ function PageLink({
   );
 }
 
-function pageHref(page: number) {
-  if (page <= 1) return "/dashboard/users";
-  return `/dashboard/users?page=${page}`;
+function pageHref(page: number, q: string) {
+  const parts: string[] = [];
+  if (q) parts.push(`q=${encodeURIComponent(q)}`);
+  if (page > 1) parts.push(`page=${page}`);
+  return parts.length ? `/dashboard/users?${parts.join("&")}` : "/dashboard/users";
 }

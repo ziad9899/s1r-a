@@ -15,6 +15,12 @@ import {
   ShieldCheck,
   Award,
   Bell,
+  BadgeCheck,
+  Gift,
+  Wallet,
+  CreditCard,
+  LifeBuoy,
+  Scale,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -39,6 +45,7 @@ const items: readonly Item[] = [
   { href: "/dashboard/onboarding", label: "شاشات الترحيب", icon: PanelsTopLeft },
   { href: "/dashboard/trust-items", label: "لماذا S1R", icon: Award },
   { href: "/dashboard/notifications", label: "الإشعارات", icon: Bell },
+  { href: "/dashboard/referral", label: "دعوة الأصدقاء", icon: Gift },
   { href: "/dashboard/branches", label: "الفروع", icon: Building2 },
   {
     href: "/dashboard/users",
@@ -47,10 +54,40 @@ const items: readonly Item[] = [
     allow: ["super_admin", "admin"] as const,
   },
   {
+    href: "/dashboard/warranties",
+    label: "الضمانات",
+    icon: BadgeCheck,
+    allow: ["super_admin"] as const,
+  },
+  {
+    href: "/dashboard/wallet",
+    label: "المحفظة والكاش باك",
+    icon: Wallet,
+    allow: ["super_admin"] as const,
+  },
+  {
+    href: "/dashboard/payments",
+    label: "طرق الدفع",
+    icon: CreditCard,
+    allow: ["super_admin"] as const,
+  },
+  {
     href: "/dashboard/admins",
     label: "إدارة الصلاحيات",
     icon: ShieldCheck,
     allow: ["super_admin"] as const,
+  },
+  {
+    href: "/dashboard/support",
+    label: "تواصل مع الدعم",
+    icon: LifeBuoy,
+    allow: ["super_admin", "admin"] as const,
+  },
+  {
+    href: "/dashboard/legal",
+    label: "الصفحات النظامية",
+    icon: Scale,
+    allow: ["super_admin", "admin"] as const,
   },
   { href: "/dashboard/settings", label: "الإعدادات", icon: Settings },
 ];

@@ -24,6 +24,7 @@ type Row = {
 };
 
 const AR_DATETIME = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
+  timeZone: "Asia/Riyadh",
   month: "short",
   day: "numeric",
   hour: "2-digit",

@@ -29,6 +29,7 @@ type AdminRow = {
 };
 
 const AR_DATE = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
+  timeZone: "Asia/Riyadh",
   year: "numeric",
   month: "short",
   day: "numeric",

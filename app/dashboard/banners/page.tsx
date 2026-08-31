@@ -151,7 +151,8 @@ function targetLabel(type: string, value: string | null): string {
 
 function scheduleLabel(start: string | null, end: string | null): string {
   if (!start && !end) return "دائم";
-  const fmt = (d: string) => new Date(d).toLocaleDateString("ar-SA");
+  const fmt = (d: string) =>
+    new Date(d).toLocaleDateString("ar-SA", { timeZone: "Asia/Riyadh" });
   if (start && end) return `${fmt(start)} → ${fmt(end)}`;
   if (start) return `من ${fmt(start)}`;
   return `حتى ${fmt(end!)}`;

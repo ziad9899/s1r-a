@@ -16,6 +16,12 @@ type Result =
   | { ok: true; filename: string; content: string }
   | { ok: false; error: string };
 
+// Riyadh-local timestamp for CSV ("YYYY-MM-DD HH:MM") so exported times match
+// exactly what the customer booked (not the UTC the DB stores).
+function riyadhStamp(iso: string): string {
+  return new Date(iso).toLocaleString("sv-SE", { timeZone: "Asia/Riyadh" });
+}
+
 export async function exportBookingsCsv(): Promise<Result> {
   const gate = await assertCallerIsAdmin();
   if (!gate.ok) return { ok: false, error: gate.error };
@@ -71,14 +77,14 @@ export async function exportBookingsCsv(): Promise<Result> {
       c?.phone ?? "",
       b.service_name,
       b.branch_name,
-      new Date(b.scheduled_at).toISOString(),
+      riyadhStamp(b.scheduled_at),
       vehicleLabel(b.vehicle_type),
       b.vehicle_plate ?? "",
       b.vehicle_year ?? "",
       b.color ?? "",
       b.estimated_price_sar,
       STATUS_LABELS[b.status] ?? b.status,
-      new Date(b.created_at).toISOString(),
+      riyadhStamp(b.created_at),
     ];
   });
 

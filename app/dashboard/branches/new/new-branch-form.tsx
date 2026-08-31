@@ -11,30 +11,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-type Branch = {
-  id: string;
-  name: string;
-  name_en: string | null;
-  city: string;
-  city_en: string | null;
-  address: string;
-  address_en: string | null;
-  phone: string | null;
-  maps_url: string | null;
-  active: boolean;
-  sort_order: number;
-};
-
-export type HourRow = {
-  weekday: number;
-  open_time: string;
-  close_time: string;
-};
-
-type HoursMap = Record<number, { open_time: string; close_time: string }>;
-
-// weekday ordering matches DateTime.weekday (1 = Monday … 7 = Sunday).
-// We render Saturday first because that's the Saudi workweek start.
+// weekday ordering matches DateTime.weekday (1 = Monday … 7 = Sunday), Saturday
+// first (Saudi workweek). Mirrors branch-edit-form so a branch is created with
+// its hours in one step; the same edit form tweaks them later.
 const DAYS: { weekday: number; label: string }[] = [
   { weekday: 6, label: "السبت" },
   { weekday: 7, label: "الأحد" },
@@ -47,134 +26,143 @@ const DAYS: { weekday: number; label: string }[] = [
 
 type SlotState = { open: string; close: string; closed: boolean };
 
-function toLocal(raw: string | undefined): string {
-  // PostgreSQL `time` comes back as "HH:MM:SS"; the <input type="time">
-  // wants "HH:MM" or "HH:MM:SS" — either is accepted but trim seconds for
-  // a cleaner edit experience.
-  if (!raw) return "";
-  const [h = "00", m = "00"] = raw.split(":");
-  return `${h.padStart(2, "0")}:${m.padStart(2, "0")}`;
-}
-
-function initialSlots(hoursByWeekday: HoursMap): Record<number, SlotState> {
+const initialSlots = (): Record<number, SlotState> => {
   const out: Record<number, SlotState> = {};
   for (const { weekday } of DAYS) {
-    const row = hoursByWeekday[weekday];
-    if (row) {
-      out[weekday] = {
-        open: toLocal(row.open_time),
-        close: toLocal(row.close_time),
-        closed: false,
-      };
-    } else {
-      out[weekday] = { open: "08:00", close: "00:00", closed: true };
-    }
+    // Sensible default: open Sat–Thu 10:00→00:00, Friday closed.
+    out[weekday] = { open: "10:00", close: "00:00", closed: weekday === 5 };
   }
   return out;
-}
+};
 
-export function BranchEditForm({
-  branch,
-  hoursByWeekday,
-}: {
-  branch: Branch;
-  hoursByWeekday: HoursMap;
-}) {
+type Meta = {
+  id: string;
+  name: string;
+  name_en: string;
+  city: string;
+  city_en: string;
+  address: string;
+  address_en: string;
+  phone: string;
+  maps_url: string;
+  sort_order: number;
+  active: boolean;
+};
+
+const EMPTY: Meta = {
+  id: "",
+  name: "",
+  name_en: "",
+  city: "",
+  city_en: "",
+  address: "",
+  address_en: "",
+  phone: "",
+  maps_url: "",
+  sort_order: 1,
+  active: true,
+};
+
+// A branch id is a human slug (the table PK is text, e.g. "sir-riyadh"), so we
+// derive one from the English name and let the admin override it.
+const slugify = (s: string) =>
+  s
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+export function NewBranchForm({ nextSortOrder }: { nextSortOrder: number }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [form, setForm] = useState<Branch>(branch);
-  const [slots, setSlots] = useState<Record<number, SlotState>>(
-    initialSlots(hoursByWeekday),
-  );
+  const [form, setForm] = useState<Meta>({ ...EMPTY, sort_order: nextSortOrder });
+  const [idTouched, setIdTouched] = useState(false);
+  const [slots, setSlots] = useState<Record<number, SlotState>>(initialSlots());
 
-  function set<K extends keyof Branch>(key: K, value: Branch[K]) {
+  function set<K extends keyof Meta>(key: K, value: Meta[K]) {
     setForm((f) => ({ ...f, [key]: value }));
   }
-
   function setSlot(weekday: number, patch: Partial<SlotState>) {
     setSlots((s) => ({ ...s, [weekday]: { ...s[weekday], ...patch } }));
   }
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const id = (idTouched ? form.id : slugify(form.name_en || form.id)).trim();
+    if (!id || !/^[a-z0-9-]+$/.test(id)) {
+      toast.error("المعرّف (id) لازم إنجليزي صغير بدون مسافات، مثل: sir-jeddah");
+      return;
+    }
+    if (!form.name.trim() || !form.city.trim() || !form.address.trim()) {
+      toast.error("الاسم والمدينة والعنوان (عربي) مطلوبة.");
+      return;
+    }
+
     startTransition(async () => {
       const supabase = createSupabaseBrowserClient();
 
-      // 1. Branch metadata.
-      const { error: branchErr } = await supabase
+      // Guard against a duplicate id before insert for a clean message.
+      const { data: existing } = await supabase
         .from("branches")
-        .update({
-          name: form.name,
-          name_en: form.name_en,
-          city: form.city,
-          city_en: form.city_en,
-          address: form.address,
-          address_en: form.address_en,
-          phone: form.phone,
-          maps_url: form.maps_url || null,
-          active: form.active,
-          sort_order: Number(form.sort_order),
-        })
-        .eq("id", form.id);
-      if (branchErr) {
-        toast.error(`تعذّر حفظ بيانات الفرع: ${branchErr.message}`);
+        .select("id")
+        .eq("id", id)
+        .maybeSingle();
+      if (existing) {
+        toast.error(`المعرّف "${id}" مستخدم بالفعل، اختر غيره.`);
         return;
       }
 
-      // 2. Hours: closed weekdays get a delete, open ones an upsert. We
-      // don't try to be clever here — branch_hours is at most 7 rows.
-      const upserts: HourRow[] = [];
-      const closedWeekdays: number[] = [];
+      const { error: branchErr } = await supabase.from("branches").insert({
+        id,
+        name: form.name,
+        name_en: form.name_en || null,
+        city: form.city,
+        city_en: form.city_en || null,
+        address: form.address,
+        address_en: form.address_en || null,
+        phone: form.phone || null,
+        maps_url: form.maps_url || null,
+        active: form.active,
+        sort_order: Number(form.sort_order),
+      });
+      if (branchErr) {
+        toast.error(`تعذّر إنشاء الفرع: ${branchErr.message}`);
+        return;
+      }
+
+      const upserts = [];
       for (const { weekday, label } of DAYS) {
         const s = slots[weekday];
-        if (s.closed) {
-          closedWeekdays.push(weekday);
-        } else if (!s.open || !s.close) {
+        if (s.closed) continue;
+        if (!s.open || !s.close) {
           toast.error(`عبّئ ساعات ${label} أو حدّده مغلقاً.`);
           return;
-        } else {
-          // close at midnight (00:00) is allowed as a sentinel for "until
-          // end of day". Otherwise close must be strictly after open.
-          const isMidnightClose = s.close === "00:00";
-          if (!isMidnightClose && s.close <= s.open) {
-            toast.error(
-              `${label}: وقت الإغلاق لازم بعد وقت الفتح. (أو 00:00 = منتصف الليل)`,
-            );
-            return;
-          }
-          upserts.push({
-            weekday,
-            open_time: s.open,
-            close_time: s.close,
-          });
         }
-      }
-
-      if (closedWeekdays.length) {
-        const { error: delErr } = await supabase
-          .from("branch_hours")
-          .delete()
-          .eq("branch_id", form.id)
-          .in("weekday", closedWeekdays);
-        if (delErr) {
-          toast.error(`تعذّر تحديث الإجازات: ${delErr.message}`);
+        const isMidnightClose = s.close === "00:00";
+        if (!isMidnightClose && s.close <= s.open) {
+          toast.error(`${label}: وقت الإغلاق لازم بعد وقت الفتح. (أو 00:00)`);
           return;
         }
+        upserts.push({
+          branch_id: id,
+          weekday,
+          open_time: s.open,
+          close_time: s.close,
+        });
       }
       if (upserts.length) {
-        const { error: upErr } = await supabase
+        const { error: hoursErr } = await supabase
           .from("branch_hours")
-          .upsert(
-            upserts.map((u) => ({ ...u, branch_id: form.id })),
-            { onConflict: "branch_id,weekday" },
-          );
-        if (upErr) {
-          toast.error(`تعذّر حفظ الساعات: ${upErr.message}`);
+          .insert(upserts);
+        if (hoursErr) {
+          toast.error(`أُنشئ الفرع لكن تعذّر حفظ الساعات: ${hoursErr.message}`);
+          router.push(`/dashboard/branches/${id}`);
           return;
         }
       }
 
-      toast.success("تمّ الحفظ");
+      toast.success("تمّ إنشاء الفرع");
+      router.push("/dashboard/branches");
       router.refresh();
     });
   }
@@ -187,9 +175,17 @@ export function BranchEditForm({
         </CardHeader>
         <CardContent className="grid gap-4 grid-cols-2">
           <Field label="الاسم (عربي)" value={form.name} onChange={(v) => set("name", v)} />
-          <Field label="الاسم (English)" ltr value={form.name_en ?? ""} onChange={(v) => set("name_en", v)} />
+          <Field
+            label="الاسم (English)"
+            ltr
+            value={form.name_en}
+            onChange={(v) => {
+              set("name_en", v);
+              if (!idTouched) set("id", slugify(v));
+            }}
+          />
           <Field label="المدينة (عربي)" value={form.city} onChange={(v) => set("city", v)} />
-          <Field label="المدينة (English)" ltr value={form.city_en ?? ""} onChange={(v) => set("city_en", v)} />
+          <Field label="المدينة (English)" ltr value={form.city_en} onChange={(v) => set("city_en", v)} />
           <Field
             label="العنوان (عربي)"
             value={form.address}
@@ -199,21 +195,20 @@ export function BranchEditForm({
           <Field
             label="العنوان (English)"
             ltr
-            value={form.address_en ?? ""}
+            value={form.address_en}
             onChange={(v) => set("address_en", v)}
             className="col-span-2"
           />
+          <Field label="الجوال" ltr value={form.phone} onChange={(v) => set("phone", v)} />
+          <Field label="رابط Google Maps" ltr value={form.maps_url} onChange={(v) => set("maps_url", v)} />
           <Field
-            label="الجوال"
+            label="المعرّف id (إنجليزي، للنظام)"
             ltr
-            value={form.phone ?? ""}
-            onChange={(v) => set("phone", v)}
-          />
-          <Field
-            label="رابط Google Maps"
-            ltr
-            value={form.maps_url ?? ""}
-            onChange={(v) => set("maps_url", v)}
+            value={form.id}
+            onChange={(v) => {
+              setIdTouched(true);
+              set("id", v);
+            }}
           />
           <Field
             label="ترتيب العرض"
@@ -221,7 +216,7 @@ export function BranchEditForm({
             value={String(form.sort_order)}
             onChange={(v) => set("sort_order", Number(v))}
           />
-          <div className="flex items-end gap-3">
+          <div className="flex items-end gap-3 col-span-2">
             <input
               id="active"
               type="checkbox"
@@ -268,17 +263,13 @@ export function BranchEditForm({
                     dir="ltr"
                     value={s.close}
                     disabled={s.closed}
-                    onChange={(e) =>
-                      setSlot(weekday, { close: e.target.value })
-                    }
+                    onChange={(e) => setSlot(weekday, { close: e.target.value })}
                   />
                   <input
                     type="checkbox"
                     className="size-4 mx-3"
                     checked={s.closed}
-                    onChange={(e) =>
-                      setSlot(weekday, { closed: e.target.checked })
-                    }
+                    onChange={(e) => setSlot(weekday, { closed: e.target.checked })}
                     aria-label={`${label} مغلق`}
                   />
                 </div>
@@ -286,9 +277,8 @@ export function BranchEditForm({
             })}
           </div>
           <p className="mt-3 text-xs text-muted-foreground">
-            وقت الإغلاق 00:00 = منتصف الليل. يمكن ضبط أي وقت بالدقائق (مثال 14:30)
-            ويظهر في التطبيق كما هو. مدة الفاصل بين المواعيد تُضبط من أعلى صفحة
-            «الفروع».
+            وقت الإغلاق 00:00 = منتصف الليل. يمكن ضبط أي وقت بالدقائق (مثال 14:30).
+            مدة الفاصل بين المواعيد تُضبط من أعلى صفحة «الفروع».
           </p>
         </CardContent>
       </Card>
@@ -296,7 +286,7 @@ export function BranchEditForm({
       <div className="flex justify-end">
         <Button type="submit" disabled={pending}>
           {pending && <Loader2 className="size-4 animate-spin" />}
-          حفظ التغييرات
+          إنشاء الفرع
         </Button>
       </div>
     </form>

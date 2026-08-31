@@ -10,8 +10,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
 import { ExportButton } from "@/components/export-button";
 import { exportBranchesCsv } from "./export-actions";
+import { SlotIntervalCard } from "./slot-interval-card";
 
 type BranchRow = {
   id: string;
@@ -25,11 +27,20 @@ type BranchRow = {
 
 export default async function BranchesPage() {
   const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase
-    .from("branches")
-    .select("id,name,name_en,city,address,phone,active")
-    .order("sort_order");
+  const [branchesRes, slotRes] = await Promise.all([
+    supabase
+      .from("branches")
+      .select("id,name,name_en,city,address,phone,active")
+      .order("sort_order"),
+    supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", "booking_slot_minutes")
+      .maybeSingle(),
+  ]);
+  const { data, error } = branchesRes;
   const rows = (data ?? []) as BranchRow[];
+  const slotMinutes = (slotRes.data?.value as string | undefined) ?? "60";
 
   return (
     <div className="space-y-6">
@@ -40,8 +51,15 @@ export default async function BranchesPage() {
             عناوين الفروع وأرقام التواصل وساعات العمل.
           </p>
         </div>
-        <ExportButton action={exportBranchesCsv} />
+        <div className="flex items-center gap-2">
+          <Link href="/dashboard/branches/new" className={buttonVariants()}>
+            إضافة فرع
+          </Link>
+          <ExportButton action={exportBranchesCsv} />
+        </div>
       </div>
+
+      <SlotIntervalCard initial={slotMinutes} />
 
       <div className="rounded-md border bg-background">
         <Table>

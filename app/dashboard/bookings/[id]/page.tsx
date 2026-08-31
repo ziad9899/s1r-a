@@ -58,6 +58,7 @@ type AuditRow = {
 };
 
 const AR_FULL = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
+  timeZone: "Asia/Riyadh",
   weekday: "long",
   day: "numeric",
   month: "long",
